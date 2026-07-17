@@ -22,8 +22,14 @@ COLORS = {
     "GRID": (0, 0, 0)  # Black border
 }
 
+CELL_SIZE = 40
+MAP_WIDTH, MAP_HEIGHT = CELL_SIZE * 8, CELL_SIZE * 8
+
+
 def drawMap():
-    pass
+    # initialise grid with empty value, white color
+    grid_data = [[("0", "")] * 20 for _ in range(10)]
+    
 
 @bot.command()
 async def map(ctx):
