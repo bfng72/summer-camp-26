@@ -26,6 +26,7 @@ COLORS = {
     "K": (0, 0, 0),         # Black (from layout)
     "GRID": (0, 0, 0),      # Black border
     "Y": (255, 251, 71),    # Golden Yellow for fallback
+    "GREY": (186, 191, 196), # Grey for axis
 }
 
 LABEL_COLORS = {
@@ -40,7 +41,7 @@ LABEL_COLORS = {
 }
 
 CELL_SIZE = 50
-MAP_WIDTH, MAP_HEIGHT = CELL_SIZE * 20, CELL_SIZE * 18
+MAP_WIDTH, MAP_HEIGHT = CELL_SIZE * (20+1), CELL_SIZE * (18+1)
 COLOUR_LAYOUT = [
     #12345678901234567890
     "WWRGGGGGRWWRGGGGGRWW", #1
@@ -100,24 +101,42 @@ def drawMap():
     except Exception:
         font = None
 
+    # Draw header corner cell
+    draw.rectangle([0, 0, CELL_SIZE - 1, CELL_SIZE - 1], fill=COLORS["GREY"], outline=COLORS["GRID"])
 
+    # Draw X-axis labels (1 to 20) on top row
+    for j in range(1, 21):
+        x1, y1 = j * CELL_SIZE, 0
+        x2, y2 = x1 + CELL_SIZE, CELL_SIZE
+        draw.rectangle([x1, y1, x2 - 1, y2 - 1], fill=COLORS["GREY"], outline=COLORS["GRID"])
+        draw.text((x1 + CELL_SIZE/2, y1 + CELL_SIZE/2), str(j), fill=COLORS["K"], anchor="mm", font=font)
+
+    # Draw Y-axis labels (A to R) on left column
+    for i in range(1, 19):
+        x1, y1 = 0, i * CELL_SIZE
+        x2, y2 = CELL_SIZE, y1 + CELL_SIZE
+        label_letter = chr(64 + i) # 65 is 'A'
+        draw.rectangle([x1, y1, x2 - 1, y2 - 1], fill=COLORS["GREY"], outline=COLORS["GRID"])
+        draw.text((x1 + CELL_SIZE/2, y1 + CELL_SIZE/2), label_letter, fill=COLORS["K"], anchor="mm", font=font)
+
+    # Draw actual map cells
     for i in range(18): #y axis
         for j in range(20): #x axis
             # paint map
             color_code = COLOUR_LAYOUT[i][j]
             color = COLORS.get(color_code, COLORS["G"])
             
-            x1, y1 = j * CELL_SIZE, i * CELL_SIZE
+            # Offset by 1 cell size to leave room for labels
+            x1, y1 = (j + 1) * CELL_SIZE, (i + 1) * CELL_SIZE
             x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
             
             # Draw cell background and subtle grid border
             draw.rectangle([x1, y1, x2 - 1, y2 - 1], fill=color, outline=COLORS["GRID"])
 
-
             # labels
             label_code = label_layout[i][j]
             if label_code != "0":
-                x, y = j * CELL_SIZE + (CELL_SIZE/2), i * CELL_SIZE + (CELL_SIZE/2)
+                x, y = x1 + (CELL_SIZE/2), y1 + (CELL_SIZE/2)
                 draw.text(
                     (x, y), 
                     label_code, 
@@ -176,7 +195,7 @@ async def update(ctx, group: int, *coords: str):
     for coord in coords:
         #convert coords eg. a1 -> (1,1), b2 -> (2,2), etc., 1-indexed
         x = ord(coord[0].lower()) - 96
-        y = int(coord[1])
+        y = int(coord[1:]) # Support multi-digit columns like a10
         
         try:
             # update label layout, label layout 0-indexed
