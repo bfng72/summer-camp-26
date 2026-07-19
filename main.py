@@ -149,6 +149,7 @@ async def update(ctx, group: int, *coords: str):
         await ctx.send("ERROR: Duplicate coordinates")
         return
     
+    
     # parse coords and update the map
     msg = await ctx.send("Updating map...")
     
@@ -174,6 +175,12 @@ async def update(ctx, group: int, *coords: str):
         for coord in coords:
             try:
                 (x, y) = helpers.convertCoord(coord)
+
+                # if yellow, cannot have group on it
+                if COLOUR_LAYOUT[x][y] == "Y":
+                    await ctx.send(f"ERROR: {coord} is yellow, cannot have group on it.")
+                    await msg.delete()
+                    return
                 
                 #if coord has number, add the coord to village_coords
                 if label_layout[x][y] != "0":
