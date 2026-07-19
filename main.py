@@ -148,6 +148,13 @@ def drawMap():
                     )
 
     return img
+
+
+def convertCoord(coord: str):
+    x = ord(coord[0].lower()) - 96
+    y = int(coord[1:]) # Support multi-digit columns like a10
+    
+    return x, y
             
     
 
@@ -179,7 +186,7 @@ async def update(ctx, group: int, *coords: str):
         return
     
     # check if group is valid
-    if group not in [1,2,3,4,5,6,7,8]:
+    if group not in [0,1,2,3,4,5,6,7,8]:
         await ctx.send("Invalid group number. Must be between 1 and 8")
         return
     
@@ -191,23 +198,38 @@ async def update(ctx, group: int, *coords: str):
     # parse coords and update the map
     msg = await ctx.send("Updating map...")
     
+    if group == 0:
+        #remove number in cell
+        for coord in coords:
+            x, y = convertCoord(coord)
+            
+            try:
+                # update label layout, label layout 0-indexed
+                row = list(label_layout[x-1])
+                row[y-1] = "0"
 
-    for coord in coords:
-        #convert coords eg. a1 -> (1,1), b2 -> (2,2), etc., 1-indexed
-        x = ord(coord[0].lower()) - 96
-        y = int(coord[1:]) # Support multi-digit columns like a10
-        
-        try:
-            # update label layout, label layout 0-indexed
-            row = list(label_layout[x-1])
-            row[y-1] = str(group)
+                #convert back to string
+                label_layout[x-1] = "".join(row)
 
-            #convert back to string
-            label_layout[x-1] = "".join(row)
+            except:
+                await ctx.send(f"Invalid coordinate: {coord}")
+                return
 
-        except:
-            await ctx.send(f"Invalid coordinate: {coord}")
-            return
+    else:
+        for coord in coords:
+            x, y = convertCoord(coord)
+            
+            try:
+                # update label layout, label layout 0-indexed
+                row = list(label_layout[x-1])
+                row[y-1] = str(group)
+
+                #convert back to string
+                label_layout[x-1] = "".join(row)
+
+            except:
+                await ctx.send(f"Invalid coordinate: {coord}")
+                return
 
     await msg.edit(content="OK")
     
