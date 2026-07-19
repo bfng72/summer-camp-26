@@ -1,2 +1,6 @@
 .env
 .ttf
+.json
+__pycache__
+.venv
+.pyc

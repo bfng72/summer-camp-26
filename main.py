@@ -1,12 +1,13 @@
-from PIL import ImageFont
 import discord
 from discord.ext import commands
 import io
+import datetime as dt
+import json
 
 import os
 import dotenv
 
-from PIL import Image, ImageDraw
+import helpers
 
 
 dotenv.load_dotenv()
@@ -86,77 +87,30 @@ label_layout = [
     "66000000077000000088", #18
 ]
 
+village_coords = set()
 
 
-def drawMap():
-    """
-    The function to generate the map.
-    """
-    # Create canvas
-    img = Image.new("RGB", (MAP_WIDTH, MAP_HEIGHT), color=COLORS["W"])
-    draw = ImageDraw.Draw(img)
-
+# save data to text file
+def save_data():
     try:
-        font = ImageFont.truetype("Google.ttf", 30)
-    except Exception:
-        font = None
+        with open("autosave.json", "w") as f:
+            json.dump({
+                "label_layout": label_layout,
+                "village_coords": list(village_coords),
+                "last_update": dt.datetime.now().strftime("%H:%M:%S")
+            }, f, indent=4)
+        print("Autosave complete: autosave.json")
+    except Exception as e:
+        print(f"Autosave failed: {e}")
 
-    # Draw header corner cell
-    draw.rectangle([0, 0, CELL_SIZE - 1, CELL_SIZE - 1], fill=COLORS["GREY"], outline=COLORS["GRID"])
-
-    # Draw X-axis labels (1 to 20) on top row
-    for j in range(1, 21):
-        x1, y1 = j * CELL_SIZE, 0
-        x2, y2 = x1 + CELL_SIZE, CELL_SIZE
-        draw.rectangle([x1, y1, x2 - 1, y2 - 1], fill=COLORS["GREY"], outline=COLORS["GRID"])
-        draw.text((x1 + CELL_SIZE/2, y1 + CELL_SIZE/2), str(j), fill=COLORS["K"], anchor="mm", font=font)
-
-    # Draw Y-axis labels (A to R) on left column
-    for i in range(1, 19):
-        x1, y1 = 0, i * CELL_SIZE
-        x2, y2 = CELL_SIZE, y1 + CELL_SIZE
-        label_letter = chr(64 + i) # 65 is 'A'
-        draw.rectangle([x1, y1, x2 - 1, y2 - 1], fill=COLORS["GREY"], outline=COLORS["GRID"])
-        draw.text((x1 + CELL_SIZE/2, y1 + CELL_SIZE/2), label_letter, fill=COLORS["K"], anchor="mm", font=font)
-
-    # Draw actual map cells
-    for i in range(18): #y axis
-        for j in range(20): #x axis
-            # paint map
-            color_code = COLOUR_LAYOUT[i][j]
-            color = COLORS.get(color_code, COLORS["G"])
-            
-            # Offset by 1 cell size to leave room for labels
-            x1, y1 = (j + 1) * CELL_SIZE, (i + 1) * CELL_SIZE
-            x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
-            
-            # Draw cell background and subtle grid border
-            draw.rectangle([x1, y1, x2 - 1, y2 - 1], fill=color, outline=COLORS["GRID"])
-
-            # labels
-            label_code = label_layout[i][j]
-            if label_code != "0":
-                x, y = x1 + (CELL_SIZE/2), y1 + (CELL_SIZE/2)
-                draw.text(
-                    (x, y), 
-                    label_code, 
-                    fill=LABEL_COLORS.get(label_code, COLORS["GRID"]), 
-                    stroke_width=2, 
-                    stroke_fill=COLORS["GRID"], 
-                    anchor="mm",
-                    font=font
-                    )
-
-    return img
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
 
 
-def convertCoord(coord: str):
-    x = ord(coord[0].lower()) - 96
-    y = int(coord[1:]) # Support multi-digit columns like a10
-    
-    return x, y
-            
-    
+
+###
+             
 
 @bot.command()
 async def map(ctx):
@@ -165,7 +119,7 @@ async def map(ctx):
     """
     msg = await ctx.send("Generating map...")
 
-    img = drawMap()
+    img = helpers.drawMap(MAP_WIDTH, MAP_HEIGHT, COLORS, LABEL_COLORS, CELL_SIZE, COLOUR_LAYOUT, label_layout, village_coords)
 
     with io.BytesIO() as image_binary:
         img.save(image_binary, "PNG")
@@ -187,53 +141,68 @@ async def update(ctx, group: int, *coords: str):
     
     # check if group is valid
     if group not in [0,1,2,3,4,5,6,7,8]:
-        await ctx.send("Invalid group number. Must be between 1 and 8")
+        await ctx.send("ERROR: Invalid group number. Must be between 1 and 8")
         return
     
     # check for duplicates in coords
     if len(coords) != len(set(coords)):
-        await ctx.send("Duplicate coordinates")
+        await ctx.send("ERROR: Duplicate coordinates")
         return
     
     # parse coords and update the map
     msg = await ctx.send("Updating map...")
     
     if group == 0:
-        #remove number in cell
+        #remove number or village in cell
         for coord in coords:
-            x, y = convertCoord(coord)
-            
             try:
-                # update label layout, label layout 0-indexed
-                row = list(label_layout[x-1])
-                row[y-1] = "0"
-
-                #convert back to string
-                label_layout[x-1] = "".join(row)
-
+                (x, y) = helpers.convertCoord(coord)
+                
+                # if there is village on coord, remove it only
+                if (x, y) in village_coords:
+                    village_coords.remove((x, y))
+                else:
+                    row = list(label_layout[x])
+                    row[y] = "0"
+                    label_layout[x] = "".join(row)
             except:
-                await ctx.send(f"Invalid coordinate: {coord}")
+                await ctx.send(f"ERROR: Invalid coordinate: {coord}")
+                await msg.delete()
                 return
 
     else:
         for coord in coords:
-            x, y = convertCoord(coord)
-            
             try:
-                # update label layout, label layout 0-indexed
-                row = list(label_layout[x-1])
-                row[y-1] = str(group)
-
-                #convert back to string
-                label_layout[x-1] = "".join(row)
-
+                (x, y) = helpers.convertCoord(coord)
+                
+                #if coord has number, add the coord to village_coords
+                if label_layout[x][y] != "0":
+                    #if coord color code is K, allow adding village
+                    if COLOUR_LAYOUT[x][y] == "K":
+                        if (x, y) in village_coords:
+                            await ctx.send(f"ERROR: {coord} already has a village.")
+                            await msg.delete()
+                            return
+                        else:
+                            village_coords.add((x, y))
+                    else:
+                        await ctx.send(f"ERROR: Cannot build village in this coordinate: {coord}.")
+                        await msg.delete()
+                        return
+                else:
+                    row = list(label_layout[x])
+                    row[y] = str(group)
+                    label_layout[x] = "".join(row)
             except:
-                await ctx.send(f"Invalid coordinate: {coord}")
+                await ctx.send(f"ERROR: Invalid coordinate: {coord}")
+                await msg.delete()
                 return
+
+    save_data()
 
     await msg.edit(content="OK")
     
-    img = drawMap()
+    img = helpers.drawMap(MAP_WIDTH, MAP_HEIGHT, COLORS, LABEL_COLORS, CELL_SIZE, COLOUR_LAYOUT, label_layout, village_coords)
     with io.BytesIO() as image_binary:
         img.save(image_binary, "PNG")
         image_binary.seek(0)
